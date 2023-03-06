@@ -1,6 +1,8 @@
 # sql-migrate
 
-> SQL Schema migration tool for [Go](https://golang.org/). Works exclusively with [pgx](https://github.com/jackc/pgx) db driver. 
+This is a fork of the [sql-migrate](https://github.com/rubenv/sql-migrate/) SQL Schema migration tool for [Go](https://golang.org/). 
+
+The motivation for this fork is to remove the `go-gorp` dependency, simplifying the codebase but making it work with the [pgx](https://github.com/jackc/pgx) db driver exclusively. 
 
 [![Build Status](https://travis-ci.org/rubenv/sql-migrate.svg?branch=master)](https://travis-ci.org/rubenv/sql-migrate) [![GoDoc](https://godoc.org/github.com/rubenv/sql-migrate?status.svg)](https://godoc.org/github.com/rubenv/sql-migrate)
 
@@ -141,6 +143,15 @@ You can also embed migrations with any library that implements `http.FileSystem`
 migrationSource := &migrate.HttpFileSystemMigrationSource{
     FileSystem: httpFS,
 }
+```
+
+## Tests
+
+Run the tests by first starting the Postgres docker container.
+
+```bash
+docker compose up
+go test
 ```
 
 ## Extending

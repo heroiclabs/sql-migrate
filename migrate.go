@@ -41,10 +41,12 @@ type MigrationSet struct {
 
 var migSet = MigrationSet{}
 
+const DefaultMigrationTableName = "migration_info"
+
 // NewMigrationSet returns a parametrized Migration object
 func (ms MigrationSet) getTableName() string {
 	if ms.TableName == "" {
-		return "migration_info"
+		return DefaultMigrationTableName
 	}
 	return ms.TableName
 }
@@ -457,7 +459,7 @@ func (ms MigrationSet) planMigrationCommon(ctx context.Context, db *pgx.Conn, m 
 		return nil, err
 	}
 
-	migrationRecords, err := GetMigrationRecords(ctx, db)
+	migrationRecords, err := ms.GetMigrationRecords(ctx, db)
 	if err != nil {
 		return nil, err
 	}
