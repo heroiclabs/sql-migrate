@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 
 	. "gopkg.in/check.v1"
 )
 
-var sqliteMigrations = []*Migration{
+var testMigrations = []*Migration{
 	{
 		Id:   "123",
 		Up:   []string{"CREATE TABLE people (id int);"},
@@ -44,7 +45,7 @@ func (s *SqliteMigrateSuite) TearDownTest(c *C) {
 
 func (s *SqliteMigrateSuite) TestRunMigration(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:1],
+		Migrations: testMigrations[:1],
 	}
 
 	ctx := context.Background()
@@ -65,10 +66,12 @@ func (s *SqliteMigrateSuite) TestRunMigration(c *C) {
 
 func (s *SqliteMigrateSuite) TestRunMigrationEscapeTable(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:1],
+		Migrations: testMigrations[:1],
 	}
 
-	SetTable("my migrations")
+	migrationTable := "my migrations"
+
+	SetTable(migrationTable)
 
 	ctx := context.Background()
 	// Executes one migration
@@ -76,13 +79,22 @@ func (s *SqliteMigrateSuite) TestRunMigrationEscapeTable(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(n, Equals, 1)
 
+	var id string
+	var appliedAt pgtype.Timestamptz
+	if err := s.Db.QueryRow(ctx, fmt.Sprintf("SELECT id, applied_at FROM %q", migrationTable)).Scan(&id, &appliedAt); err != nil {
+		c.Assert(err, IsNil)
+	}
+
+	c.Assert(id, Equals, testMigrations[0].Id)
+	c.Assert(appliedAt.Time.IsZero(), Equals, false)
+
 	// Tear down
 	s.Db.Exec(ctx, `DROP TABLE IF EXISTS "my migrations"`)
 }
 
 func (s *SqliteMigrateSuite) TestMigrateMultiple(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:2],
+		Migrations: testMigrations[:2],
 	}
 
 	ctx := context.Background()
@@ -98,7 +110,7 @@ func (s *SqliteMigrateSuite) TestMigrateMultiple(c *C) {
 
 func (s *SqliteMigrateSuite) TestMigrateIncremental(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:1],
+		Migrations: testMigrations[:1],
 	}
 
 	ctx := context.Background()
@@ -109,7 +121,7 @@ func (s *SqliteMigrateSuite) TestMigrateIncremental(c *C) {
 
 	// Execute a new migration
 	migrations = &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:2],
+		Migrations: testMigrations[:2],
 	}
 	n, err = Exec(ctx, s.Db, migrations, Up)
 	c.Assert(err, IsNil)
@@ -325,8 +337,8 @@ func (s *SqliteMigrateSuite) TestMigrateDownFull(c *C) {
 func (s *SqliteMigrateSuite) TestMigrateTransaction(c *C) {
 	migrations := &MemoryMigrationSource{
 		Migrations: []*Migration{
-			sqliteMigrations[0],
-			sqliteMigrations[1],
+			testMigrations[0],
+			testMigrations[1],
 			{
 				Id:   "125",
 				Up:   []string{"INSERT INTO people (id, first_name) VALUES (1, 'Test')", "SELECT fail"},
@@ -619,7 +631,7 @@ func (s *SqliteMigrateSuite) TestPlanMigrationToVersion(c *C) {
 // migrations are propagated and returned by Exec.
 func (s *SqliteMigrateSuite) TestExecWithUnknownMigrationInDatabase(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:2],
+		Migrations: testMigrations[:2],
 	}
 
 	// Executes two migrations
@@ -642,7 +654,7 @@ func (s *SqliteMigrateSuite) TestExecWithUnknownMigrationInDatabase(c *C) {
 		},
 	}
 	migrations = &MemoryMigrationSource{
-		Migrations: append(sqliteMigrations[:1], newSqliteMigrations...),
+		Migrations: append(testMigrations[:1], newSqliteMigrations...),
 	}
 
 	n, err = Exec(ctx, s.Db, migrations, Up)
@@ -660,7 +672,7 @@ func (s *SqliteMigrateSuite) TestExecWithUnknownMigrationInDatabase(c *C) {
 
 func (s *SqliteMigrateSuite) TestRunMigrationObjDefaultTable(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:1],
+		Migrations: testMigrations[:1],
 	}
 
 	ms := MigrationSet{TableName: DefaultMigrationTableName}
@@ -686,7 +698,7 @@ func (s *SqliteMigrateSuite) TestRunMigrationObjDefaultTable(c *C) {
 
 func (s *SqliteMigrateSuite) TestRunMigrationObjOtherTable(c *C) {
 	migrations := &MemoryMigrationSource{
-		Migrations: sqliteMigrations[:1],
+		Migrations: testMigrations[:1],
 	}
 
 	SetTable(DefaultMigrationTableName)
