@@ -405,7 +405,7 @@ func (ms MigrationSet) applyMigrations(ctx context.Context, db *pgx.Conn, dir Mi
 
 		switch dir {
 		case Up:
-			if _, err = tx.Exec(ctx, fmt.Sprintf("INSERT INTO %q (id) VALUES ($1)", ms.TableName), migration.Id); err != nil {
+			if _, err = tx.Exec(ctx, fmt.Sprintf("INSERT INTO %q (id, applied_at) VALUES ($1, now())", ms.TableName), migration.Id); err != nil {
 				tx.Rollback(ctx)
 				return applied, newTxError(migration, err)
 			}
