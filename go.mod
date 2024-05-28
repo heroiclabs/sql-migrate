@@ -1,9 +1,9 @@
 module github.com/heroiclabs/sql-migrate
 
-go 1.18
+go 1.21
 
 require (
-	github.com/jackc/pgx/v5 v5.5.5
+	github.com/jackc/pgx/v5 v5.6.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
