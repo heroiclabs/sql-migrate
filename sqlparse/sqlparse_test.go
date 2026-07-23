@@ -88,6 +88,39 @@ func (s *SqlParseSuite) TestIntentionallyBadStatements(c *C) {
 	}
 }
 
+func (s *SqlParseSuite) TestNoTransaction(c *C) {
+	type testData struct {
+		sql         string
+		disableUp   bool
+		disableDown bool
+	}
+
+	tests := []testData{
+		{
+			sql:         functxt,
+			disableUp:   false,
+			disableDown: false,
+		},
+		{
+			sql:         notxUptxt,
+			disableUp:   true,
+			disableDown: false,
+		},
+		{
+			sql:         notxDowntxt,
+			disableUp:   false,
+			disableDown: true,
+		},
+	}
+
+	for _, test := range tests {
+		migration, err := ParseMigration(strings.NewReader(test.sql))
+		c.Assert(err, IsNil)
+		c.Assert(migration.DisableTransactionUp, Equals, test.disableUp)
+		c.Assert(migration.DisableTransactionDown, Equals, test.disableDown)
+	}
+}
+
 func (s *SqlParseSuite) TestJustComment(c *C) {
 	for _, test := range justAComment {
 		_, err := ParseMigration(strings.NewReader(test))
@@ -184,6 +217,22 @@ CREATE TABLE fancier_post (
 
 -- +migrate Down
 DROP TABLE fancier_post;
+`
+
+// notransaction on the Up direction only
+var notxUptxt = `-- +migrate Up notransaction
+CREATE INDEX CONCURRENTLY idx_post_title ON post (title);
+
+-- +migrate Down
+DROP INDEX idx_post_title;
+`
+
+// notransaction on the Down direction only
+var notxDowntxt = `-- +migrate Up
+CREATE INDEX idx_post_title ON post (title);
+
+-- +migrate Down notransaction
+DROP INDEX CONCURRENTLY idx_post_title;
 `
 
 // raise error when statements are not explicitly ended

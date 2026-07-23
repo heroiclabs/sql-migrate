@@ -3,9 +3,10 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"net/http"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"net/http"
 
 	. "gopkg.in/check.v1"
 )
@@ -334,18 +335,22 @@ func (s *SqliteMigrateSuite) TestMigrateDownFull(c *C) {
 	c.Assert(n, Equals, 0)
 }
 
-func (s *SqliteMigrateSuite) TestMigrateTransaction(c *C) {
-	migrations := &MemoryMigrationSource{
+func insertPeopleMigrations(disableTx bool, up ...string) *MemoryMigrationSource {
+	return &MemoryMigrationSource{
 		Migrations: []*Migration{
 			testMigrations[0],
 			testMigrations[1],
 			{
-				Id:   "125",
-				Up:   []string{"INSERT INTO people (id, first_name) VALUES (1, 'Test')", "SELECT fail"},
-				Down: []string{}, // Not important here
+				Id:                   "125",
+				Up:                   up,
+				DisableTransactionUp: disableTx,
 			},
 		},
 	}
+}
+
+func (s *SqliteMigrateSuite) TestMigrateTransaction(c *C) {
+	migrations := insertPeopleMigrations(false, "INSERT INTO people (id, first_name) VALUES (1, 'Test')", "SELECT fail")
 
 	ctx := context.Background()
 	// Should fail, transaction should roll back the INSERT.
@@ -358,6 +363,48 @@ func (s *SqliteMigrateSuite) TestMigrateTransaction(c *C) {
 	err = s.Db.QueryRow(ctx, "SELECT COUNT(*) FROM people").Scan(&count)
 	c.Assert(err, IsNil)
 	c.Assert(count, Equals, 0)
+}
+
+func (s *SqliteMigrateSuite) TestMigrateNoTransaction(c *C) {
+	migrations := insertPeopleMigrations(true, "INSERT INTO people (id, first_name) VALUES (1, 'Test')")
+
+	ctx := context.Background()
+	n, err := Exec(ctx, s.Db, migrations, Up)
+	c.Assert(err, IsNil)
+	c.Assert(n, Equals, 3)
+
+	// The row should be inserted and the migration recorded.
+	var count int
+	err = s.Db.QueryRow(ctx, "SELECT COUNT(*) FROM people").Scan(&count)
+	c.Assert(err, IsNil)
+	c.Assert(count, Equals, 1)
+
+	var recorded int
+	err = s.Db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = $1", DefaultMigrationTableName), "125").Scan(&recorded)
+	c.Assert(err, IsNil)
+	c.Assert(recorded, Equals, 1)
+}
+
+func (s *SqliteMigrateSuite) TestMigrateNoTransactionNoRollback(c *C) {
+	migrations := insertPeopleMigrations(true, "INSERT INTO people (id, first_name) VALUES (1, 'Test')", "SELECT fail")
+
+	ctx := context.Background()
+	// Should fail on the second statement. Without a surrounding transaction,
+	// the INSERT is NOT rolled back.
+	n, err := Exec(ctx, s.Db, migrations, Up)
+	c.Assert(err, Not(IsNil))
+	c.Assert(n, Equals, 2)
+
+	// INSERT should still be present.
+	var count int
+	err = s.Db.QueryRow(ctx, "SELECT COUNT(*) FROM people").Scan(&count)
+	c.Assert(err, IsNil)
+	c.Assert(count, Equals, 1)
+
+	var recorded int
+	err = s.Db.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE id = $1", DefaultMigrationTableName), "125").Scan(&recorded)
+	c.Assert(err, IsNil)
+	c.Assert(recorded, Equals, 0)
 }
 
 func (s *SqliteMigrateSuite) TestPlanMigration(c *C) {
